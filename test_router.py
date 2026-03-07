@@ -4,4 +4,5 @@ state = {
     "topic": "Self Attention in Transformers"
 }
 
-print(router_node(state))
+result = router_node(state)
+print(result)

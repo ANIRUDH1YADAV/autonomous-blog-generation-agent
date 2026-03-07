@@ -1,3 +1,5 @@
+from unittest import result
+
 from app.services.llm_service import get_llm
 
 llm = get_llm()
@@ -17,9 +19,9 @@ or
 no_research
 """
 
-    result = llm.invoke(prompt).content.lower()
+    result = llm.invoke(prompt).content.strip().lower()
 
-    if "research" in result:
-        return {"mode": "research"}
+   if result == "research":
+        return {"mode" : "research"}
     else:
-        return {"mode": "no_research"}
+        return {"mode" : "no_research"}
