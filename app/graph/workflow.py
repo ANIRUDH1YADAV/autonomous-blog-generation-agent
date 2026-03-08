@@ -1,5 +1,6 @@
 import operator
 from typing import Annotated
+from app.agents.image_generator import image_generator_node
 
 from typing import TypedDict, List
 from langgraph.graph import StateGraph, START, END
@@ -19,6 +20,7 @@ class BlogState(TypedDict, total=False):
     plan: dict
     section: str
     written_sections: Annotated[List[str], operator.add]
+    images: list
     final_blog: str
 
 
@@ -51,6 +53,7 @@ builder.add_node("research", research_node)
 builder.add_node("planner", planner_node)
 builder.add_node("writer", writer_node)
 builder.add_node("reducer", reducer_node)
+builder.add_node("image_generator", image_generator_node)
 
 builder.add_edge(START, "router")
 
@@ -71,7 +74,9 @@ builder.add_conditional_edges(
     ["writer"]
 )
 
-builder.add_edge("writer", "reducer")
+builder.add_edge("writer", "image_generator")
+
+builder.add_edge("image_generator", "reducer")
 
 builder.add_edge("reducer", END)
 

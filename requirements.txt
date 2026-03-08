@@ -9,3 +9,5 @@ streamlit
 python-dotenv
 pydantic
 langchain-tavily
+diffusers
+requests
