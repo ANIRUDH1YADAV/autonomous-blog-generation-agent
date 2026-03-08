@@ -1,49 +1,53 @@
 from app.services.llm_service import get_llm
+from app.schemas.blog_schema import BlogPlan
 import json
 import re
 
 llm = get_llm()
 
+
 def planner_node(state: dict):
 
     topic = state["topic"]
-    evidence = state.get("evidence", [])
-
-    evidence_text = ""
-
-    for e in evidence:
-        evidence_text += f"{e['title']}\n{e['content']}\n\n"
 
     prompt = f"""
 You are a professional blog planner.
 
-Create a blog outline in JSON format.
+Create a structured outline for a technical blog.
 
-Topic:
-{topic}
+Topic: {topic}
 
-Return ONLY JSON like this:
+Return ONLY valid JSON in this format:
 
 {{
 "title": "Blog Title",
 "sections": [
-"Section 1",
-"Section 2",
-"Section 3",
-"Section 4",
-"Section 5"
+{{
+"title": "Section Title",
+"subsections": [
+"Subtopic 1",
+"Subtopic 2"
 ]
 }}
+]
+}}
+
+Rules:
+- Create 5 sections
+- Each section must contain 2 subsections
+- Return ONLY JSON
 """
 
     response = llm.invoke(prompt).content
 
-    # extract JSON safely
-    json_match = re.search(r"\{.*\}", response, re.DOTALL)
+    json_match = re.search(r"\{[\s\S]*\}", response)
 
-    if json_match:
-        plan = json.loads(json_match.group())
-    else:
+    if not json_match:
         raise ValueError("Planner did not return valid JSON")
 
-    return {"plan": plan}
+    plan_dict = json.loads(json_match.group())
+
+    # validate using Pydantic
+    plan = BlogPlan(**plan_dict)
+
+    return {"plan": plan.model_dump()}

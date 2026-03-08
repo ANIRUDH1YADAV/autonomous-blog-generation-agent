@@ -1,12 +1,11 @@
-from unittest import result
-
 from app.services.llm_service import get_llm
 
 llm = get_llm()
 
+
 def router_node(state: dict):
 
-    topic = state["topic"]
+    topic = state.get("topic")
 
     prompt = f"""
 Decide if this topic needs internet research.
@@ -18,10 +17,12 @@ research
 or
 no_research
 """
+    response = llm.invoke(prompt)
+    result = response.content.strip().lower()
 
-    result = llm.invoke(prompt).content.strip().lower()
-
-   if result == "research":
-        return {"mode" : "research"}
+    if result == "research":
+        state["mode"] = "research"
     else:
-        return {"mode" : "no_research"}
+        state["mode"] = "no_research"
+
+    return state

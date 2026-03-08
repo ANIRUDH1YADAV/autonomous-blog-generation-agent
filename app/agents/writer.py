@@ -7,22 +7,30 @@ def writer_node(state: dict):
     topic = state["topic"]
     section = state["section"]
 
+    # extract title and subsections
+    title = section["title"]
+    subsections = section.get("subsections", [])
+
     prompt = f"""
-You are a professional technical blog writer.
+You are a technical blog writer.
 
-Write a detailed blog section.
+Write the section of a blog.
 
-Topic:
-{topic}
+Topic: {topic}
 
-Section:
-{section}
+Section Title: {title}
 
-Write clear explanations and examples if needed.
+Cover these subsections:
+{subsections}
+
+Rules:
+- Do NOT repeat the blog title
+- Do NOT introduce the entire article again
+- Write only this section
 """
 
     response = llm.invoke(prompt).content
 
     return {
-        "section_content": response
+        "written_sections": [f"## {title}\n{response}"]
     }
