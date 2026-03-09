@@ -6,8 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 HF_API_KEY = os.getenv("HF_API_KEY")
-
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
+API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo"
 
 headers = {
     "Authorization": f"Bearer {HF_API_KEY}"
