@@ -6,8 +6,6 @@ st.title("AI Autonomous Blog Generator")
 
 topic = st.text_input("Enter Blog Topic")
 
-final_state = None
-
 if st.button("Generate Blog"):
 
     if topic:
@@ -15,34 +13,51 @@ if st.button("Generate Blog"):
         state = {"topic": topic}
 
         status = st.empty()
+        final_state = None
 
         with st.spinner("AI Agents are working..."):
 
-            for event in graph.stream(state):
+            for event in graph.stream(state, stream_mode="values"):
 
-                node = list(event.keys())[0]
+                final_state = event
 
-                status.write(f"Running agent: {node}")
+                # show which agent is running
+                if "mode" in event:
+                    status.write("Running agent: router")
 
-                final_state = event[node]
+                if "plan" in event:
+                    status.write("Running agent: planner")
 
+                if "written_sections" in event:
+                    status.write("Running agent: writer")
+
+                if "final_blog" in event:
+                    status.write("Running agent: reducer")
+
+        # show final blog
         if final_state and "final_blog" in final_state:
 
             blog = final_state["final_blog"]
 
-        st.subheader("Generated Blog")
+            st.subheader("Generated Blog")
 
-        placeholder = st.empty()
+            placeholder = st.empty()
+            output = ""
 
-        output = ""
-        for char in blog:
+            # ChatGPT style streaming
+            for char in blog:
+                output += char
+                placeholder.markdown(output)
+                time.sleep(0.002)
 
-          output += char
+        # show generated images
+        if final_state and "images" in final_state:
 
-          placeholder.markdown(output)
+            st.subheader("Generated Diagrams")
 
-          time.sleep(0.002)
+            for img in final_state["images"]:
+                st.write(img["section"])
+                st.image(img["path"])
 
-        else:
-
-          st.warning("Please enter a topic.")
+    else:
+        st.warning("Please enter a topic.")
