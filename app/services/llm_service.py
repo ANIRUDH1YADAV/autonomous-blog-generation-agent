@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_llm():
-    return ChatGroq(
+    return ChatGroq(streaming=True,
         model="llama-3.1-8b-instant",
         temperature=0.3
     )

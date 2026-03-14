@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 HF_API_KEY = os.getenv("HF_API_KEY")
-API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo"
+API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/sdxl-turbo"
 
 headers = {
     "Authorization": f"Bearer {HF_API_KEY}"
@@ -14,9 +14,18 @@ headers = {
 
 
 def query(payload):
-    response = requests.post(API_URL, headers=headers, json=payload)
-    return response.content
 
+    response = requests.post(API_URL, headers=headers, json=payload)
+
+    print("Status:", response.status_code)
+    print("Response:", response.text[:200])
+
+    content_type = response.headers.get("content-type", "")
+
+    if "image" in content_type:
+        return response.content
+
+    return None
 
 def image_generator_node(state: dict):
 
@@ -33,6 +42,9 @@ def image_generator_node(state: dict):
         image_bytes = query({
             "inputs": prompt
         })
+
+        if image_bytes is None:
+            continue
        
         filename = title.replace(" ", "_") + ".png"
 

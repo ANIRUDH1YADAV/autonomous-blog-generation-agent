@@ -2,12 +2,12 @@ from app.services.llm_service import get_llm
 
 llm = get_llm()
 
+
 def writer_node(state: dict):
 
     topic = state["topic"]
     section = state["section"]
 
-    # extract title and subsections
     title = section["title"]
     subsections = section.get("subsections", [])
 
@@ -29,7 +29,14 @@ Rules:
 - Write only this section
 """
 
-    response = llm.invoke(prompt).content
+    response = ""
+
+    # stream tokens from the LLM
+    for chunk in llm.stream(prompt):
+
+        token = chunk.content or ""
+
+        response += token
 
     return {
         "written_sections": [f"## {title}\n{response}"]
