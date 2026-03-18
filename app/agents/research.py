@@ -1,28 +1,42 @@
+import logging
 from langchain_tavily import TavilySearch
-from dotenv import load_dotenv
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-search_tool = TavilySearch(max_results=3)
+# One shared search tool — no need to recreate per call
+search_tool = TavilySearch(max_results=5)
 
 
-def research_node(state: dict):
-
+def research_node(state: dict) -> dict:
+    """
+    Searches the web for relevant information about the topic.
+    Stores clean evidence (title, url, summary) for the planner
+    to use when structuring the blog outline.
+    """
     topic = state["topic"]
 
-    response = search_tool.invoke(topic)
+    logger.info(f"Researching topic: '{topic}'")
 
-    results = response.get("results", [])
+    try:
+        response = search_tool.invoke(topic)
+        results = response.get("results", [])
 
-    evidence = []
+        # Keep only what downstream agents actually need
+        evidence = [
+            {
+                "title":   r.get("title", ""),
+                "url":     r.get("url", ""),
+                "content": r.get("content", "")[:500]  # trim long pages
+            }
+            for r in results
+            if r.get("content")  # skip empty results
+        ]
 
-    for r in results:
-        evidence.append({
-            "title": r.get("title", ""),
-            "url": r.get("url", ""),
-            "content": r.get("content", "")
-        })
+        logger.info(f"Research found {len(evidence)} useful sources")
 
-    state["evidence"] = evidence
+        return {"evidence": evidence}
 
-    return state
+    except Exception as e:
+        logger.error(f"Research failed for topic '{topic}': {e}")
+        # Return empty evidence so the graph can continue gracefully
+        return {"evidence": []}

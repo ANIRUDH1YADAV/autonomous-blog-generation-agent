@@ -1,90 +1,90 @@
-import re
-import requests
 import os
+import re
+import logging
+from io import BytesIO
 from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 HF_API_KEY = os.getenv("HF_API_KEY")
 
-# ✅ black-forest-labs/FLUX.1-dev — actively maintained, works on HF Inference API
-API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-
-headers = {
-    "Authorization": f"Bearer {HF_API_KEY}"
-}
-
-# Absolute path — resolves correctly regardless of where streamlit is run from
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 IMAGES_DIR = os.path.normpath(os.path.join(BASE_DIR, "..", "..", "generated_images"))
 
-
-def query(prompt: str):
-    """Call HF Inference API with retry for model loading (503)."""
-
-    payload = {"inputs": prompt}
-
-    for attempt in range(3):   # retry up to 3 times for 503 model loading
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
-
-        print(f"Attempt {attempt + 1} | Status: {response.status_code} | Content-Type: {response.headers.get('content-type', '')}")
-
-        if response.status_code == 200:
-            content_type = response.headers.get("content-type", "")
-            if "image" in content_type:
-                return response.content
-            else:
-                # API returned JSON error instead of image
-                print(f"❌ API error response: {response.text[:300]}")
-                return None
-
-        elif response.status_code == 503:
-            # Model is loading on HF servers — wait and retry
-            import time
-            wait = int(response.headers.get("X-WaitFor", 20))
-            print(f"⏳ Model loading, retrying in {wait}s...")
-            time.sleep(wait)
-
-        else:
-            print(f"❌ Unexpected status {response.status_code}: {response.text[:300]}")
-            return None
-
-    print("❌ All retries exhausted")
-    return None
+# InferenceClient with provider="auto" automatically picks the best
+# available provider for the model — no more manual URL management.
+client = InferenceClient(
+    provider="auto",
+    api_key=HF_API_KEY,
+)
 
 
-def image_generator_node(state: dict):
+def _generate_image(prompt: str) -> bytes | None:
+    """
+    Uses HuggingFace InferenceClient to generate an image from a text prompt.
+    FLUX.1-schnell is the free, fast model — works reliably on the free tier.
+    Returns raw PNG bytes, or None if generation fails.
+    """
+    try:
+        # Returns a PIL Image object directly
+        image = client.text_to_image(
+            prompt=prompt,
+            model="black-forest-labs/FLUX.1-schnell",
+        )
 
+        # Convert PIL Image to raw bytes for saving to disk
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    except Exception as e:
+        logger.error(f"Image generation failed: {e}")
+        return None
+
+
+def image_generator_node(state: dict) -> dict:
+    """
+    Generates one illustration per blog section (capped at 2).
+    Images are saved locally and referenced by relative path
+    so they work both locally and on Azure.
+    """
     sections = state["plan"]["sections"]
-    images = []
+    images   = []
 
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
-    for section in sections[:2]:   # limit to 2 images
-        title = section["title"]
-        prompt = f"clean minimalist technical illustration explaining: {title}, digital art, professional"
+    for section in sections[:2]:
+        title  = section["title"]
+        prompt = (
+            f"clean minimalist technical illustration explaining: {title}, "
+            "digital art, professional, white background"
+        )
 
-        print(f"\n🎨 Generating image for: {title}")
+        logger.info(f"Generating image for section: '{title}'")
 
-        image_bytes = query(prompt)
+        image_bytes = _generate_image(prompt)
 
         if image_bytes is None:
-            print(f"⚠️ Skipping image for: {title}")
+            logger.warning(f"Skipping image for section: '{title}'")
             continue
 
-        # Sanitize filename
-        safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(" ", "_")
-        filename = f"{safe_title}.png"
-        abs_path = os.path.normpath(os.path.join(IMAGES_DIR, filename))
+        safe_title = re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")
+        filename   = f"{safe_title}.png"
+        rel_path   = os.path.join("generated_images", filename)
+        abs_path   = os.path.join(IMAGES_DIR, filename)
 
         with open(abs_path, "wb") as f:
             f.write(image_bytes)
 
-        print(f"✅ Image saved: {abs_path}")
+        logger.info(f"Image saved: {rel_path}")
 
         images.append({
             "section": title,
-            "path": abs_path
+            "alt":     title,
+            "path":    rel_path
         })
 
     return {"images": images}
