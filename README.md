@@ -10,36 +10,48 @@
 User Input (topic or transcript)
           │
           ▼
-   ┌─────────────┐
-   │   Router    │  ── decides needs_web_search + needs_translation
-   └─────────────┘
-     │           │
-   Yes            No
-     │             │
-     ▼             ▼
-┌──────────┐  ┌──────────────┐
-│Web Search│  │LLM Knowledge │
-│ (Tavily) │  │ (Groq only)  │
-└──────────┘  └──────────────┘
-     │               │
-     └──────┬─────────┘
-            ▼
-   ┌────────────────┐
-   │  Brainstorming │  ── title + 5 section headings
-   └────────────────┘
-            │
-            ▼
-   ┌────────────────────┐
-   │ Content Generation │  ── full blog draft
-   └────────────────────┘
-            │
-            ▼
-   ┌────────────────┐
-   │Image Generator │  ── always runs (HuggingFace)
-   └────────────────┘
+   ┌─────────────────────────────────────────┐
+   │              Router Agent               │
+   │  Sets needs_web_search + needs_translation (once, stored in state) │
+   └─────────────────────────────────────────┘
+          │                          │
+          │ needs_web_search          │ needs_translation
+          │ (used immediately)        │ (stored in state, used later)
+          │                          │
+     ┌────┴─────┐                    │
+   Yes           No                  │
+     │             │                 │
+     ▼             ▼                 │
+┌──────────┐  ┌──────────────┐      │
+│Web Search│  │LLM Knowledge │      │
+│ (Tavily) │  │ (Groq only)  │      │
+└──────────┘  └──────────────┘      │
+     │               │               │
+     └──────┬─────────┘              │
+            ▼                        │
+   ┌────────────────┐                │
+   │  Brainstorming │                │
+   │  title+headings│                │
+   └────────────────┘                │
+            │                        │
+            ▼                        │
+   ┌────────────────────┐            │
+   │ Content Generation │            │
+   │   full blog draft  │            │
+   └────────────────────┘            │
+            │                        │
+            ▼                        │
+   ┌────────────────┐                │
+   │Image Generator │                │
+   │  always runs   │                │
+   └────────────────┘                │
+            │                        │
+            │◄───────────────────────┘
+            │  Router decision reused from state
             │
      ┌──────┴──────┐
    Yes              No
+(needs_translation)
      │               │
      ▼               │
 ┌──────────┐         │
@@ -49,19 +61,22 @@ User Input (topic or transcript)
      └──────┬─────────┘
             ▼
    ┌─────────────┐
-   │ SEO Reducer │  ── meta description + keywords
+   │ SEO Reducer │
+   │ meta+keywords│
    └─────────────┘
             │
             ▼
    ┌─────────────┐
-   │ Save Memory │  ── AsyncSqliteSaver checkpoint
+   │ Save Memory │
+   │  SQLite DB  │
    └─────────────┘
             │
             ▼
    Final Blog Output ✓
 ```
 
-**State management** flows seamlessly between all nodes via LangGraph's `BlogState` TypedDict. The Router runs once and writes both routing decisions into state — no duplicate LLM calls.
+> **How the Router works across both decisions:**
+> The Router runs **once** at the start and writes **both** `needs_web_search` and `needs_translation` into state simultaneously. The first decision (`needs_web_search`) is used immediately after the router. The second decision (`needs_translation`) is stored in state and reused after image generation — no second LLM call needed. This is **state-driven routing**.
 
 ---
 
@@ -92,24 +107,30 @@ Current agent flow:
 
 | Agent | Trigger | Responsibility |
 |---|---|---|
-| `router` | Always | Decides `needs_web_search` + `needs_translation` |
+| `router` | Always — runs once | Sets `needs_web_search` + `needs_translation` into state |
 | `web_search` | `needs_web_search = True` | Fetches real-time evidence via Tavily |
 | `llm_knowledge` | `needs_web_search = False` | Uses Groq base knowledge |
 | `brainstorming` | Always | Generates blog title + 5 section headings |
 | `content_generation` | Always | Writes full blog draft |
 | `image_generator` | Always | Generates blog image via HuggingFace |
-| `translator` | `needs_translation = True` | Translates blog to target language |
+| `translator` | `needs_translation = True` (from router state) | Translates blog to target language |
 | `seo_reducer` | Always | Trims content, adds meta description + keywords |
 | `save_memory` | Always | Persists state via AsyncSqliteSaver |
 
 Conditional routing logic:
 
 ```python
-# After router node
+# Router sets BOTH flags at once (runs only once)
+router_node() → {
+    "needs_web_search": True/False,   # used immediately
+    "needs_translation": True/False   # stored, used after image generation
+}
+
+# After router — first decision used immediately
 needs_web_search = True  → web_search    → brainstorming
 needs_web_search = False → llm_knowledge → brainstorming
 
-# After image generator
+# After image generator — second decision reused from state
 needs_translation = True  → translator  → seo_reducer
 needs_translation = False → seo_reducer
 
@@ -214,8 +235,6 @@ cd autonomous-blog-generation-agent
 ```
 
 ### 2. Configure environment variables
-
-Copy and fill in your `.env` file:
 
 ```bash
 GROQ_API_KEY=your_groq_key
