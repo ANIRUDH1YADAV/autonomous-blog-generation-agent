@@ -1,72 +1,68 @@
-import operator
-import sqlite3
-from typing import Annotated, TypedDict, List
+from collections.abc import AsyncIterator
+from typing import TypedDict
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.agents.router import router_node
 from app.agents.research import research_node
-from app.agents.planner import planner_node
-from app.agents.writer import writer_node
-from app.agents.reducer import reducer_node
+from app.agents.llm_knowledge import llm_knowledge_node
+from app.agents.brainstorming import brainstorming_node
+from app.agents.content_generator import content_generator_node
+from app.agents.translator import translator_node
+from app.agents.seo_reducer import seo_reducer_node
+from app.agents.memory_persist import memory_persist_node
 from app.agents.image_generator import image_generator_node
 
 
-# ── Shared state ──────────────────────────────────────────────────────────────
-# Every key here flows through the entire graph.
-# total=False means no key is required upfront — nodes add them as they run.
+
 
 class BlogState(TypedDict, total=False):
     topic: str
-    mode: str                                             # "research" or "direct"
-    evidence: list                                        # filled by research_node
-    plan: dict                                            # filled by planner_node
-    section: str                                          # per-branch context for writer
-    written_sections: Annotated[List[str], operator.add] # merged from parallel writers
-    images: list                                          # filled by image_generator_node
-    final_blog: str                                       # assembled by reducer_node
+    target_language: str
+    needs_web_search: bool
+    needs_translation: bool
+    evidence: list
+    title: str
+    headings: list[str]
+    plan: dict
+    draft_blog: str
+    images: list
+    final_blog: str
+    meta_description: str
+    keywords: list[str]
+    saved_to_memory: bool
 
 
-# ── Routing: should we research first or plan directly? ───────────────────────
+# Routing: web search branch selection 
 
 def route_after_router(state: BlogState) -> str:
-    if state.get("mode") == "research":
-        return "research"
-    return "planner"
+    if state.get("needs_web_search"):
+        return "web_search"
+    return "llm_knowledge"
 
 
-# ── Fan-out: send each section to a separate writer branch ────────────────────
-# All branches run in parallel. Their outputs merge into written_sections
-# automatically via operator.add.
+#  Routing: translation branch after image generation 
 
-def expand_sections(state: BlogState):
-    sections = state["plan"]["sections"]
-    return [
-        Send("writer", {"topic": state["topic"], "section": section})
-        for section in sections
-    ]
+def route_after_image_generation(state: BlogState) -> str:
+    if state.get("needs_translation"):
+        return "translator"
+    return "seo_reducer"
 
 
-# ── Guard: only move to image generation if writing produced content ──────────
-
-def route_after_writer(state: BlogState) -> str:
-    if state.get("written_sections"):
-        return "image_generator"
-    return END
-
-
-# ── Graph construction ────────────────────────────────────────────────────────
+#  Graph construction 
 
 builder = StateGraph(BlogState)
 
 builder.add_node("router",          router_node)
-builder.add_node("research",        research_node)
-builder.add_node("planner",         planner_node)
-builder.add_node("writer",          writer_node)
+builder.add_node("web_search",      research_node)
+builder.add_node("llm_knowledge",   llm_knowledge_node)
+builder.add_node("brainstorming",   brainstorming_node)
+builder.add_node("content_generation", content_generator_node)
 builder.add_node("image_generator", image_generator_node)
-builder.add_node("reducer",         reducer_node)
+builder.add_node("translator",      translator_node)
+builder.add_node("seo_reducer",     seo_reducer_node)
+builder.add_node("save_memory",     memory_persist_node)
 
 builder.add_edge(START, "router")
 
@@ -74,38 +70,53 @@ builder.add_conditional_edges(
     "router",
     route_after_router,
     {
-        "research": "research",
-        "planner":  "planner"
+        "web_search": "web_search",
+        "llm_knowledge": "llm_knowledge",
     }
 )
 
-builder.add_edge("research", "planner")
+builder.add_edge("web_search", "brainstorming")
+builder.add_edge("llm_knowledge", "brainstorming")
+builder.add_edge("brainstorming", "content_generation")
+builder.add_edge("content_generation", "image_generator")
 
 builder.add_conditional_edges(
-    "planner",
-    expand_sections,
-    ["writer"]
-)
-
-builder.add_conditional_edges(
-    "writer",
-    route_after_writer,
+    "image_generator",
+    route_after_image_generation,
     {
-        "image_generator": "image_generator",
-        END: END
+        "translator": "translator",
+        "seo_reducer": "seo_reducer",
     }
 )
 
-builder.add_edge("image_generator", "reducer")
-builder.add_edge("reducer",         END)
+builder.add_edge("translator", "seo_reducer")
+builder.add_edge("seo_reducer", "save_memory")
+builder.add_edge("save_memory", END)
 
 
-# ── Persistence ───────────────────────────────────────────────────────────────
-# SqliteSaver needs a raw sqlite3 connection — not from_conn_string()
-# which returns a context manager and cannot be passed to compile() directly.
-# memory.db stores every graph step on disk so sessions survive app restarts.
+# Persistence 
+# AsyncSqliteSaver supports async graph execution (ainvoke/astream) and stores
+# checkpoints in memory.db so sessions survive app restarts.
 
-conn = sqlite3.connect("memory.db", check_same_thread=False)
-checkpointer = SqliteSaver(conn)
+graph = builder.compile()
 
-graph = builder.compile(checkpointer=checkpointer)
+
+async def ainvoke_graph(initial_state: BlogState, config: dict | None = None):
+    async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
+        graph_with_checkpointer = builder.compile(checkpointer=checkpointer)
+        return await graph_with_checkpointer.ainvoke(initial_state, config=config)
+
+
+async def astream_graph(
+    initial_state: BlogState,
+    config: dict | None = None,
+    stream_mode: str = "updates",
+) -> AsyncIterator[dict]:
+    async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
+        graph_with_checkpointer = builder.compile(checkpointer=checkpointer)
+        async for event in graph_with_checkpointer.astream(
+            initial_state,
+            config=config,
+            stream_mode=stream_mode,
+        ):
+            yield event

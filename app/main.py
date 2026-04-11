@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load .env before anything else so LangSmith env vars are available
@@ -7,7 +8,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.api.blog import router as blog_router
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -57,7 +60,7 @@ app = FastAPI(
     redoc_url="/redoc"      # ReDoc UI at /redoc
 )
 
-# Allow the Streamlit UI (and any other frontend) to talk to this API
+# Allow browser-based frontends to talk to this API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,6 +69,26 @@ app.add_middleware(
 )
 
 app.include_router(blog_router, prefix="/api/v1")
+
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+GENERATED_IMAGES_DIR = BASE_DIR.parent / "generated_images"
+
+# Serve frontend assets and generated diagrams directly from FastAPI.
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+GENERATED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/generated_images",
+    StaticFiles(directory=str(GENERATED_IMAGES_DIR)),
+    name="generated_images",
+)
+
+
+@app.get("/", include_in_schema=False)
+def serve_ui():
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

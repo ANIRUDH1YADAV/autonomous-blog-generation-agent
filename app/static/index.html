@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autonomous Blog Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page-bg" aria-hidden="true"></div>
+
+  <main class="shell">
+    <header class="mast enter enter-1">
+      <p class="kicker">FASTAPI CONTENT STUDIO</p>
+      <h1>Autonomous Blog Generator</h1>
+      <p class="subtitle">Human-looking interface, AI-powered pipeline. Give a topic and receive a polished draft with diagrams.</p>
+    </header>
+
+    <section class="workspace enter enter-2">
+      <section class="card compose">
+        <h2 class="card-title">New Draft</h2>
+        <form id="blog-form" class="composer">
+          <label for="topic" class="label">Topic</label>
+          <textarea
+            id="topic"
+            name="topic"
+            rows="5"
+            placeholder="Example: The Future of AI in Healthcare"
+            required
+          ></textarea>
+
+          <label for="target-language" class="label">Target Language</label>
+          <select id="target-language" name="target-language">
+            <option value="english" selected>English</option>
+            <option value="hindi">Hindi</option>
+            <option value="spanish">Spanish</option>
+            <option value="french">French</option>
+            <option value="german">German</option>
+          </select>
+
+          <div class="actions">
+            <button id="generate-btn" type="submit">Generate Blog</button>
+            <p id="status" class="status">Ready</p>
+          </div>
+
+          <section id="progress-wrap" class="progress hidden" aria-live="polite">
+            <p class="progress-title">Live Workflow</p>
+            <ol id="progress-list" class="progress-list"></ol>
+          </section>
+        </form>
+      </section>
+    </section>
+
+    <section id="result" class="card result hidden enter enter-3">
+      <div class="result-head">
+        <h2 id="blog-title"></h2>
+
+        <div id="text-stats" class="text-stats hidden">
+          <button
+            id="stats-toggle"
+            class="stats-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="stats-menu"
+          >
+            0 words
+            <span class="caret" aria-hidden="true">▾</span>
+          </button>
+
+          <div id="stats-menu" class="stats-menu hidden" role="menu">
+            <div id="stat-words" class="stats-item active" role="menuitem">
+              <span>0 words</span>
+              <span class="check" aria-hidden="true">✓</span>
+            </div>
+            <div id="stat-characters" class="stats-item" role="menuitem">0 characters</div>
+            <div id="stat-sentences" class="stats-item" role="menuitem">0 sentences</div>
+            <div id="stat-paragraphs" class="stats-item" role="menuitem">0 paragraphs</div>
+            <div id="stat-read-time" class="stats-item" role="menuitem">0 min read</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="images-wrap" class="images-wrap hidden">
+        <h3>Generated Diagrams</h3>
+        <div id="images-grid" class="images-grid"></div>
+      </div>
+
+      <article id="blog-content" class="blog-content"></article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -51,7 +51,12 @@ def image_generator_node(state: dict) -> dict:
     Images are saved locally and referenced by relative path
     so they work both locally and on Azure.
     """
-    sections = state["plan"]["sections"]
+    headings = state.get("headings")
+    if headings:
+        sections = [{"title": heading} for heading in headings]
+    else:
+        sections = state.get("plan", {}).get("sections", [])
+
     images   = []
 
     os.makedirs(IMAGES_DIR, exist_ok=True)

@@ -1,0 +1,28 @@
+[project]
+name = "autonomous-blog-generation-agent"
+version = "0.1.0"
+description = "Production-grade content generation engine with LangGraph, FastAPI, and LangSmith"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "aiosqlite",
+  "diffusers",
+  "fastapi",
+  "langchain",
+  "langchain-community",
+  "langchain-groq",
+  "langchain-tavily",
+  "langgraph",
+  "pydantic",
+  "python-dotenv",
+  "requests",
+  "tavily-python",
+  "uvicorn",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+dev-dependencies = []

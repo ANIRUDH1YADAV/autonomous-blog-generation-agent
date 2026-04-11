@@ -5,9 +5,9 @@ langchain-community
 tavily-python
 fastapi
 uvicorn
-streamlit
 python-dotenv
 pydantic
 langchain-tavily
 diffusers
 requests
+aiosqlite
